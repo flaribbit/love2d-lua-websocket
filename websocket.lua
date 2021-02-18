@@ -32,7 +32,7 @@ local STATUS = {
     OPEN       = 1,
     CLOSING    = 2,
     CLOSED     = 3,
-    TCPOPEN    = 4,
+    TCPOPENING = 4,
 }
 
 local function _callback(_) end
@@ -49,7 +49,7 @@ function _M.new(host, port, path)
             port = port,
             path = path,
         },
-        status = STATUS.TCPOPEN,
+        status = STATUS.TCPOPENING,
         socket = socket.tcp(),
         onopen = _callback,
         onmessage = _callback,
@@ -63,45 +63,45 @@ function _M.new(host, port, path)
 end
 
 local mask_key = {1, 14, 5, 14}
-local function send(SOCK, opcode, message)
+local function send(sock, opcode, message)
     -- message type
-    SOCK:send(string.char(bor(0x80, opcode)))
+    sock:send(string.char(bor(0x80, opcode)))
 
     -- empty message
     if not message then
-        SOCK:send(string.char(0x80, unpack(mask_key)))
+        sock:send(string.char(0x80, unpack(mask_key)))
         return 0
     end
 
     -- message length
     local length = #message
     if length>65535 then
-        SOCK:send(string.char(bor(127, 0x80),
+        sock:send(string.char(bor(127, 0x80),
             0, 0, 0, 0,
             band(shr(length, 24), 0xff),
             band(shr(length, 16), 0xff),
             band(shr(length, 8), 0xff),
             band(length, 0xff)))
     elseif length>125 then
-        SOCK:send(string.char(bor(126, 0x80),
+        sock:send(string.char(bor(126, 0x80),
             band(shr(length, 8), 0xff),
             band(length, 0xff)))
     else
-        SOCK:send(string.char(bor(length, 0x80)))
+        sock:send(string.char(bor(length, 0x80)))
     end
 
     -- message
-    SOCK:send(string.char(unpack(mask_key)))
+    sock:send(string.char(unpack(mask_key)))
     local msgbyte = {message:byte(1, length)}
     for i = 1, length do
         msgbyte[i] = bxor(msgbyte[i], mask_key[(i-1)%4+1])
     end
-    return SOCK:send(string.char(unpack(msgbyte)))
+    return sock:send(string.char(unpack(msgbyte)))
 end
 
-local function read(SOCK)
+local function read(sock)
     -- byte 0-1
-    local res, err = SOCK:receive(2)
+    local res, err = sock:receive(2)
     if not res then return res, nil, err end
     local opcode = band(res:byte(), 0x0f)
     -- local flag_FIN = res:byte()>=0x80
@@ -110,15 +110,15 @@ local function read(SOCK)
     local byte = res:byte(2)
     local length = band(byte, 0x7f)
     if length==126 then
-        res = SOCK:receive(2)
+        res = sock:receive(2)
         local b1, b2 = res:byte(1, 2)
         length = shl(b1, 8) + b2
     elseif length==127 then
-        res = SOCK:receive(8)
+        res = sock:receive(8)
         local b = {res:byte(1, 8)}
         length = shl(b[5], 32) + shl(b[6], 24) + shl(b[7], 8) + b[8]
     end
-    res, err = SOCK:receive(length)
+    res, err = sock:receive(length)
     return res, opcode, err
 end
 
@@ -136,12 +136,12 @@ end
 
 local seckey = "osT3F7mvlojIvf3/8uIsJQ=="
 function _M:update()
-    if self.status==4 then
-        local SOCK = self.socket
-        local res, err = SOCK:connect("", 0)
+    local sock = self.socket
+    if self.status==STATUS.TCPOPENING then
+        local res, err = sock:connect("", 0)
         if err=="already connected" then
             local url = self.url
-            SOCK:send(
+            sock:send(
 "GET "..(url.path or"/").." HTTP/1.1\r\n"..
 "Host: "..url.host..":"..url.port.."\r\n"..
 "Connection: Upgrade\r\n"..
@@ -153,20 +153,19 @@ function _M:update()
             self.onerror("TCP connection failed")
             self.status = STATUS.CLOSED
         end
-    elseif self.status==0 then
-        local SOCK = self.socket
-        local res, err = SOCK:receive("*l")
+    elseif self.status==STATUS.CONNECTING then
+        local res, err = sock:receive("*l")
         if res then
-            repeat res, err = SOCK:receive("*l") until res==""
+            repeat res, err = sock:receive("*l") until res==""
             self.onopen()
             self.status = STATUS.OPEN
         end
-    elseif self.status==1 or self.status==2 then
+    elseif self.status==STATUS.OPEN or self.status==STATUS.CLOSING then
         while true do
-            local res, code, err = read(self.socket)
+            local res, code, err = read(sock)
             if err=="timeout" then return end
             if code==OPCODE.CLOSE then
-                self.socket:close()
+                sock:close()
                 self.onclose()
                 self.status = STATUS.CLOSED
                 return
