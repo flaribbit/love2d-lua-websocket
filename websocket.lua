@@ -1,16 +1,16 @@
 --[[
-    websocket client pure lua implement for love2d
-    by flaribbit
+websocket client pure lua implement for love2d
+by flaribbit
 
-    usage:
-        local client = require("websocket").new("127.0.0.1", 5000)
-        client.onmessage = function(s) print(s) end
-        client.onopen = function() client:send("hello from love2d") end
-        client.onclose = function() print("closed") end
+usage:
+    local client = require("websocket").new("127.0.0.1", 5000)
+    client.onmessage = function(s) print(s) end
+    client.onopen = function() client:send("hello from love2d") end
+    client.onclose = function() print("closed") end
 
-        function love.update()
-            client:update()
-        end
+    function love.update()
+        client:update()
+    end
 ]]
 
 local socket = require"socket"
@@ -39,6 +39,7 @@ local function _callback(_) end
 
 local _M = {
     OPCODE = OPCODE,
+    STATUS = STATUS,
 }
 _M.__index = _M
 
