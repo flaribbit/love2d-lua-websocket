@@ -151,7 +151,7 @@ function _M:update()
 "Sec-WebSocket-Key: "..seckey.."\r\n\r\n")
             self.status = STATUS.CONNECTING
         elseif err=="Cannot assign requested address" then
-            self.onerror("TCP connection failed")
+            self.onerror("TCP connection failed.")
             self.status = STATUS.CLOSED
         end
     elseif self.status==STATUS.CONNECTING then
@@ -167,6 +167,12 @@ function _M:update()
             if err=="timeout" then return end
             if code==OPCODE.CLOSE then
                 sock:close()
+                self.onclose()
+                self.status = STATUS.CLOSED
+                return
+            end
+            if err=="closed" then
+                self.onerror("Connection closed unexpectedly.")
                 self.onclose()
                 self.status = STATUS.CLOSED
                 return
