@@ -161,7 +161,7 @@ function _M:update()
             self.onopen()
             self.status = STATUS.OPEN
         end
-    elseif self.status==1 then
+    elseif self.status==1 or self.status==2 then
         while true do
             local res, code, err = read(self.socket)
             if err=="timeout" then return end
@@ -173,14 +173,6 @@ function _M:update()
             end
             if code==OPCODE.PING then self:pong(res) end
             self.onmessage(res)
-        end
-    elseif self.status==2 then
-        local res, code, err = read(self.socket)
-        if err=="timeout" then return end
-        if code==OPCODE.CLOSE then
-            self.socket:close()
-            self.onclose()
-            self.status = STATUS.CLOSED
         end
     end
 end
