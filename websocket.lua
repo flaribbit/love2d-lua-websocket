@@ -50,6 +50,7 @@ function _M.new(host, port, path)
             port = port,
             path = path,
         },
+        buffer = "",
         status = STATUS.TCPOPENING,
         socket = socket.tcp(),
         onopen = _callback,
@@ -103,11 +104,11 @@ end
 local function read(sock)
     -- byte 0-1
     local res, err = sock:receive(2)
-    if not res then return res, nil, err end
-    local opcode = band(res:byte(), 0x0f)
+    if err then return res, nil, err end
+    local head = res:byte()
+    -- Moved to _M:update
     -- local flag_FIN = res:byte()>=0x80
     -- local flag_MASK = res:byte(2)>=0x80
-    -- debug_print("[decode] FIN="..tostring(flag_FIN)..", opcode="..opcode..", MASK="..tostring(flag_MASK))
     local byte = res:byte(2)
     local length = band(byte, 0x7f)
     if length==126 then
@@ -120,7 +121,7 @@ local function read(sock)
         length = shl(b[5], 32) + shl(b[6], 24) + shl(b[7], 8) + b[8]
     end
     res, err = sock:receive(length)
-    return res, opcode, err
+    return res, head, err
 end
 
 function _M:send(message)
@@ -163,22 +164,28 @@ function _M:update()
         end
     elseif self.status==STATUS.OPEN or self.status==STATUS.CLOSING then
         while true do
-            local res, code, err = read(sock)
-            if err=="timeout" then return end
-            if code==OPCODE.CLOSE then
-                sock:close()
-                self.onclose()
-                self.status = STATUS.CLOSED
+            local res, head, err = read(sock)
+            if err=="timeout" then
                 return
-            end
-            if err=="closed" then
+            elseif err=="closed" then
                 self.onerror("Connection closed unexpectedly.")
                 self.onclose()
                 self.status = STATUS.CLOSED
                 return
             end
-            if code==OPCODE.PING then self:pong(res) end
-            self.onmessage(res)
+            local code = band(head, 0x0f)
+            local fin = band(head, 0x80)==0x80
+            if code==OPCODE.CLOSE then
+                sock:close()
+                self.onclose()
+                self.status = STATUS.CLOSED
+            elseif code==OPCODE.PING then self:pong(res)
+            elseif code==OPCODE.CONTINUE then
+                self.buffer = self.buffer..res
+                if fin then self.onmessage(self.buffer) end
+            else
+                if fin then self.onmessage(res) else self.buffer = res end
+            end
         end
     end
 end
