@@ -50,7 +50,10 @@ function _M.new(host, port, path)
             port = port,
             path = path,
         },
+        head = 0,
         buffer = "",
+        remain = 0,
+        frame = "",
         status = STATUS.TCPOPENING,
         socket = socket.tcp(),
         onopen = _callback,
@@ -101,9 +104,23 @@ local function send(sock, opcode, message)
     return sock:send(string.char(unpack(msgbyte)))
 end
 
-local function read(sock)
+local function read(ws)
+    local sock = ws.socket
+    local res, err, part
+    if ws.remain>0 then
+        local res, err, part = sock:receive(ws.remain)
+        if part then
+            -- still some bytes remaining
+            ws.buffer, ws.remain = ws.buffer..part, ws.remain-#part
+            return nil, nil, "pending"
+        else
+            -- all parts recieved
+            ws.buffer, ws.remain = ws.buffer..res, 0
+            return ws.buffer, ws.head, nil
+        end
+    end
     -- byte 0-1
-    local res, err = sock:receive(2)
+    res, err= sock:receive(2)
     if err then return res, nil, err end
     local head = res:byte()
     -- Moved to _M:update
@@ -118,10 +135,18 @@ local function read(sock)
     elseif length==127 then
         res = sock:receive(8)
         local b = {res:byte(1, 8)}
-        length = shl(b[5], 32) + shl(b[6], 24) + shl(b[7], 8) + b[8]
+        length = shl(b[5], 24) + shl(b[6], 16) + shl(b[7], 8) + b[8]
     end
-    res, err = sock:receive(length)
-    return res, head, err
+    res, err, part = sock:receive(length)
+    if part then
+        -- incomplete frame
+        ws.head = head
+        ws.buffer, ws.remain = part, length-#part
+        return nil, nil, "pending"
+    else
+        -- complete frame
+        return res, head, err
+    end
 end
 
 function _M:send(message)
@@ -164,8 +189,10 @@ function _M:update()
         end
     elseif self.status==STATUS.OPEN or self.status==STATUS.CLOSING then
         while true do
-            local res, head, err = read(sock)
+            local res, head, err = read(self)
             if err=="timeout" then
+                return
+            elseif err=="pending" then
                 return
             elseif err=="closed" then
                 self.onerror("Connection closed unexpectedly.")
@@ -181,10 +208,10 @@ function _M:update()
                 self.status = STATUS.CLOSED
             elseif code==OPCODE.PING then self:pong(res)
             elseif code==OPCODE.CONTINUE then
-                self.buffer = self.buffer..res
-                if fin then self.onmessage(self.buffer) end
+                self.frame = self.frame..res
+                if fin then self.onmessage(self.frame) end
             else
-                if fin then self.onmessage(res) else self.buffer = res end
+                if fin then self.onmessage(res) else self.frame = res end
             end
         end
     end
