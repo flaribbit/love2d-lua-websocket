@@ -48,7 +48,7 @@ function _M.new(host, port, path)
         url = {
             host = host,
             port = port,
-            path = path,
+            path = path or "/",
         },
         head = 0,
         buffer = "",
@@ -120,7 +120,7 @@ local function read(ws)
         end
     end
     -- byte 0-1
-    res, err= sock:receive(2)
+    res, err = sock:receive(2)
     if err then return res, nil, err end
     local head = res:byte()
     -- Moved to _M:update
@@ -169,7 +169,7 @@ function _M:update()
         if err=="already connected" then
             local url = self.url
             sock:send(
-"GET "..(url.path or"/").." HTTP/1.1\r\n"..
+"GET "..url.path.." HTTP/1.1\r\n"..
 "Host: "..url.host..":"..url.port.."\r\n"..
 "Connection: Upgrade\r\n"..
 "Upgrade: websocket\r\n"..
