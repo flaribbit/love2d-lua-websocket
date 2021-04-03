@@ -14,8 +14,8 @@ client.onopen = function()
     client:send("hello from love2d")
     client:close()
 end
-client.onclose = function()
-    print("closed")
+client.onclose = function(code, reason)
+    print("closecode: "..code..", reason: "..reason)
 end
 
 function love.update()
