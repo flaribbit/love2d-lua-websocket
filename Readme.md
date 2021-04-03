@@ -27,5 +27,8 @@ end
 * `websocket.new(host: string, port: int, path?: string) -> client`
 * `client.onopen = function()`
 * `client.onmessage = function(message: string)`
-* `client.onclose = function(closecode?: int, reason?: int)`
+* `client.onerror = function(error: string)`
+* `client.onclose = function()`
 * `client.status -> int`
+* `client:send(message: string)`
+* `client:close()`
