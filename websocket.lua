@@ -195,19 +195,22 @@ function _M:update()
             elseif err=="pending" then
                 return
             elseif err=="closed" then
-                self.onerror("Connection closed unexpectedly.")
-                self.onclose()
                 self.status = STATUS.CLOSED
                 return
             end
-            local code = band(head, 0x0f)
+            local opcode = band(head, 0x0f)
             local fin = band(head, 0x80)==0x80
-            if code==OPCODE.CLOSE then
+            if opcode==OPCODE.CLOSE then
+                if res then
+                    local code = shl(res:byte(1), 8) + res:byte(2)
+                    self.onclose(code, res:sub(3))
+                else
+                    self.onclose(1005, "")
+                end
                 sock:close()
-                self.onclose()
                 self.status = STATUS.CLOSED
-            elseif code==OPCODE.PING then self:pong(res)
-            elseif code==OPCODE.CONTINUE then
+            elseif opcode==OPCODE.PING then self:pong(res)
+            elseif opcode==OPCODE.CONTINUE then
                 self.frame = self.frame..res
                 if fin then self.onmessage(self.frame) end
             else
