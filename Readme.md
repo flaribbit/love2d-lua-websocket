@@ -28,7 +28,7 @@ end
 * `client.onopen = function()`
 * `client.onmessage = function(message: string)`
 * `client.onerror = function(error: string)`
-* `client.onclose = function()`
+* `client.onclose = function(code: int, reason: string)`
 * `client.status -> int`
 * `client:send(message: string)`
 * `client:close()`

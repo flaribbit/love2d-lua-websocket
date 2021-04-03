@@ -137,6 +137,7 @@ local function read(ws)
         local b = {res:byte(1, 8)}
         length = shl(b[5], 24) + shl(b[6], 16) + shl(b[7], 8) + b[8]
     end
+    if length==0 then return "", head, nil end
     res, err, part = sock:receive(length)
     if part then
         -- incomplete frame
@@ -201,7 +202,7 @@ function _M:update()
             local opcode = band(head, 0x0f)
             local fin = band(head, 0x80)==0x80
             if opcode==OPCODE.CLOSE then
-                if res then
+                if res~="" then
                     local code = shl(res:byte(1), 8) + res:byte(2)
                     self.onclose(code, res:sub(3))
                 else
