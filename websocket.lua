@@ -134,8 +134,8 @@ local function read(ws)
         length = shl(b1, 8) + b2
     elseif length==127 then
         res = sock:receive(8)
-        local b = {res:byte(1, 8)}
-        length = shl(b[5], 24) + shl(b[6], 16) + shl(b[7], 8) + b[8]
+        local b5, b6, b7, b8 = res:byte(5, 8)
+        length = shl(b5, 24) + shl(b6, 16) + shl(b7, 8) + b8
     end
     if length==0 then return "", head, nil end
     res, err, part = sock:receive(length)
