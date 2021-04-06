@@ -31,4 +31,5 @@ end
 * `client.onclose = function(code: int, reason: string)`
 * `client.status -> int`
 * `client:send(message: string)`
-* `client:close()`
+* `client:close(code?: int, reason?: string)`
+* `client:update()`

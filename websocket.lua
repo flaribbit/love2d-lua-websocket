@@ -221,8 +221,12 @@ function _M:update()
     end
 end
 
-function _M:close(message)
-    send(self.socket, OPCODE.CLOSE, message)
+function _M:close(code, message)
+    if code and message then
+        send(self.socket, OPCODE.CLOSE, string.char(shr(code, 8), band(code, 0xff))..message)
+    else
+        send(self.socket, OPCODE.CLOSE, nil)
+    end
     self.status = STATUS.CLOSING
 end
 
