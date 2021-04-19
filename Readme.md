@@ -9,14 +9,14 @@ Just copy `websocket.lua` to your project directory, and write code as the follo
 
 ```lua
 local client = require("websocket").new("127.0.0.1", 5000)
-client.onmessage = function(message)
+function client:onmessage(message)
     print(message)
 end
-client.onopen = function()
-    client:send("hello from love2d")
-    client:close()
+function client:onopen()
+    self:send("hello from love2d")
+    self:close()
 end
-client.onclose = function(code, reason)
+function client:onclose(code, reason)
     print("closecode: "..code..", reason: "..reason)
 end
 
@@ -27,10 +27,10 @@ end
 
 ## API
 * `websocket.new(host: string, port: int, path?: string) -> client`
-* `client.onopen = function()`
-* `client.onmessage = function(message: string)`
-* `client.onerror = function(error: string)`
-* `client.onclose = function(code: int, reason: string)`
+* `function client:onopen()`
+* `function client:onmessage(message: string)`
+* `function client:onerror(error: string)`
+* `function client:onclose(code: int, reason: string)`
 * `client.status -> int`
 * `client:send(message: string)`
 * `client:close(code?: int, reason?: string)`

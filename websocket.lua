@@ -4,9 +4,9 @@ by flaribbit
 
 usage:
     local client = require("websocket").new("127.0.0.1", 5000)
-    client.onmessage = function(s) print(s) end
-    client.onopen = function() client:send("hello from love2d") end
-    client.onclose = function() print("closed") end
+    function client:onmessage(s) print(s) end
+    function client:onopen() self:send("hello from love2d") end
+    function client:onclose = function() print("closed") end
 
     function love.update()
         client:update()
@@ -178,14 +178,14 @@ function _M:update()
 "Sec-WebSocket-Key: "..seckey.."\r\n\r\n")
             self.status = STATUS.CONNECTING
         elseif err=="Cannot assign requested address" then
-            self.onerror("TCP connection failed.")
+            self:onerror("TCP connection failed.")
             self.status = STATUS.CLOSED
         end
     elseif self.status==STATUS.CONNECTING then
         local res, err = sock:receive("*l")
         if res then
             repeat res, err = sock:receive("*l") until res==""
-            self.onopen()
+            self:onopen()
             self.status = STATUS.OPEN
         end
     elseif self.status==STATUS.OPEN or self.status==STATUS.CLOSING then
@@ -204,18 +204,18 @@ function _M:update()
             if opcode==OPCODE.CLOSE then
                 if res~="" then
                     local code = shl(res:byte(1), 8) + res:byte(2)
-                    self.onclose(code, res:sub(3))
+                    self:onclose(code, res:sub(3))
                 else
-                    self.onclose(1005, "")
+                    self:onclose(1005, "")
                 end
                 sock:close()
                 self.status = STATUS.CLOSED
             elseif opcode==OPCODE.PING then self:pong(res)
             elseif opcode==OPCODE.CONTINUE then
                 self.frame = self.frame..res
-                if fin then self.onmessage(self.frame) end
+                if fin then self:onmessage(self.frame) end
             else
-                if fin then self.onmessage(res) else self.frame = res end
+                if fin then self:onmessage(res) else self.frame = res end
             end
         end
     end
