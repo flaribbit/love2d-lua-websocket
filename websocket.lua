@@ -35,13 +35,15 @@ local STATUS = {
     TCPOPENING = 4,
 }
 
-local function _callback(_) end
-
 local _M = {
     OPCODE = OPCODE,
     STATUS = STATUS,
 }
 _M.__index = _M
+function _M:onopen() end
+function _M:onmessage(message) end
+function _M:onerror(error) end
+function _M:onclose(code, reason) end
 
 function _M.new(host, port, path)
     local m = {
@@ -51,14 +53,14 @@ function _M.new(host, port, path)
             path = path or "/",
         },
         head = 0,
-        buffer = "",
-        remain = 0,
-        frame = "",
+        _buffer = "",
+        _remain = 0,
+        _frame = "",
         status = STATUS.TCPOPENING,
         socket = socket.tcp(),
         onopen = _callback,
         onmessage = _callback,
-        onerror = print,
+        onerror = _callback,
         onclose = _callback,
     }
     m.socket:settimeout(0)
@@ -107,16 +109,16 @@ end
 local function read(ws)
     local sock = ws.socket
     local res, err, part
-    if ws.remain>0 then
-        local res, err, part = sock:receive(ws.remain)
+    if ws._remain>0 then
+        res, err, part = sock:receive(ws._remain)
         if part then
-            -- still some bytes remaining
-            ws.buffer, ws.remain = ws.buffer..part, ws.remain-#part
+            -- still some bytes _remaining
+            ws._buffer, ws._remain = ws._buffer..part, ws._remain-#part
             return nil, nil, "pending"
         else
             -- all parts recieved
-            ws.buffer, ws.remain = ws.buffer..res, 0
-            return ws.buffer, ws.head, nil
+            ws._buffer, ws._remain = ws._buffer..res, 0
+            return ws._buffer, ws.head, nil
         end
     end
     -- byte 0-1
@@ -142,7 +144,7 @@ local function read(ws)
     if part then
         -- incomplete frame
         ws.head = head
-        ws.buffer, ws.remain = part, length-#part
+        ws._buffer, ws._remain = part, length-#part
         return nil, nil, "pending"
     else
         -- complete frame
@@ -166,7 +168,7 @@ local seckey = "osT3F7mvlojIvf3/8uIsJQ=="
 function _M:update()
     local sock = self.socket
     if self.status==STATUS.TCPOPENING then
-        local res, err = sock:connect("", 0)
+        local _, err = sock:connect("", 0)
         if err=="already connected" then
             local url = self.url
             sock:send(
@@ -182,9 +184,9 @@ function _M:update()
             self.status = STATUS.CLOSED
         end
     elseif self.status==STATUS.CONNECTING then
-        local res, err = sock:receive("*l")
+        local res = sock:receive("*l")
         if res then
-            repeat res, err = sock:receive("*l") until res==""
+            repeat res = sock:receive("*l") until res==""
             self:onopen()
             self.status = STATUS.OPEN
         end
@@ -212,10 +214,10 @@ function _M:update()
                 self.status = STATUS.CLOSED
             elseif opcode==OPCODE.PING then self:pong(res)
             elseif opcode==OPCODE.CONTINUE then
-                self.frame = self.frame..res
-                if fin then self:onmessage(self.frame) end
+                self._frame = self._frame..res
+                if fin then self:onmessage(self._frame) end
             else
-                if fin then self:onmessage(res) else self.frame = res end
+                if fin then self:onmessage(res) else self._frame = res end
             end
         end
     end
