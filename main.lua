@@ -1,12 +1,15 @@
 local client = require("websocket").new("127.0.0.1", 5000)
-client.onmessage = function(s)
+function client:onmessage(s)
     print(s)
 end
-client.onopen = function()
-    client:send("hello from love2d")
-    client:close()
+function client:onopen()
+    self:send("hello from love2d")
+    self:close()
 end
-client.onclose = function(code, reason)
+function client:onerror(e)
+    print(e)
+end
+function client:onclose(code, reason)
     print("closecode: "..code..", reason: "..reason)
 end
 
