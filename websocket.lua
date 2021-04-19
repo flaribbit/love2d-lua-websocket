@@ -58,10 +58,6 @@ function _M.new(host, port, path)
         _frame = "",
         status = STATUS.TCPOPENING,
         socket = socket.tcp(),
-        onopen = _callback,
-        onmessage = _callback,
-        onerror = _callback,
-        onclose = _callback,
     }
     m.socket:settimeout(0)
     m.socket:connect(host, port)
