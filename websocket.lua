@@ -6,7 +6,7 @@ usage:
     local client = require("websocket").new("127.0.0.1", 5000)
     function client:onmessage(s) print(s) end
     function client:onopen() self:send("hello from love2d") end
-    function client:onclose = function() print("closed") end
+    function client:onclose() print("closed") end
 
     function love.update()
         client:update()
