@@ -17,6 +17,7 @@ local socket = require"socket"
 local bit = require"bit"
 local band, bor, bxor = bit.band, bit.bor, bit.bxor
 local shl, shr = bit.lshift, bit.rshift
+local seckey = "osT3F7mvlojIvf3/8uIsJQ=="
 
 local OPCODE = {
     CONTINUE = 0,
@@ -35,6 +36,9 @@ local STATUS = {
     TCPOPENING = 4,
 }
 
+---@class wsclient
+---@field socket table
+---@field url table
 local _M = {
     OPCODE = OPCODE,
     STATUS = STATUS,
@@ -45,6 +49,11 @@ function _M:onmessage(message) end
 function _M:onerror(error) end
 function _M:onclose(code, reason) end
 
+---create websocket connection
+---@param host string
+---@param port integer
+---@param path string
+---@return wsclient
 function _M.new(host, port, path)
     local m = {
         url = {
@@ -52,10 +61,9 @@ function _M.new(host, port, path)
             port = port,
             path = path or "/",
         },
-        head = 0,
+        _continue = "",
         _buffer = "",
-        _remain = 0,
-        _frame = "",
+        _expect = 0,
         status = STATUS.TCPOPENING,
         socket = socket.tcp(),
     }
@@ -102,65 +110,72 @@ local function send(sock, opcode, message)
     return sock:send(string.char(unpack(msgbyte)))
 end
 
-local function read(ws)
-    local sock = ws.socket
+---read a message
+---@return string|nil res message
+---@return number|nil head websocket frame header
+---@return string|nil err error message
+function _M:read()
     local res, err, part
-    if ws._remain>0 then
-        res, err, part = sock:receive(ws._remain)
-        if part then
-            -- still some bytes _remaining
-            ws._buffer, ws._remain = ws._buffer..part, ws._remain-#part
-            return nil, nil, "pending"
+    ::RECIEVE::
+    res, err, part = self.socket:receive(self._expect>0 and self._expect-#self._buffer or 2)
+    if err=="closed" then return nil, nil, err end
+    if part or res then
+        self._buffer = self._buffer..(part or res)
+    else
+        return nil, nil, nil
+    end
+    if self._expect==0 then
+        if #self._buffer<2 then
+            return nil, nil, "buffer length less than 2"
+        end
+        local length = band(self._buffer:byte(2), 0x7f)
+        if length==126 then
+            if #self._buffer<4 then
+                return nil, nil, "buffer length less than 4"
+            end
+            local b1, b2 = self._buffer:byte(3, 4)
+            self._expect = 2 + shl(b1, 8) + b2
+            goto RECIEVE
+        elseif length==127 then
+            if #self._buffer<10 then
+                return nil, nil, "buffer length less than 10"
+            end
+            local b5, b6, b7, b8 = self._buffer:byte(7, 10)
+            self._expect = 2 + shl(b5, 24) + shl(b6, 16) + shl(b7, 8) + b8
+            goto RECIEVE
         else
-            -- all parts recieved
-            ws._buffer, ws._remain = ws._buffer..res, 0
-            return ws._buffer, ws.head, nil
+            self._expect = 2 + length
+            goto RECIEVE
         end
     end
-    -- byte 0-1
-    res, err = sock:receive(2)
-    if err then return res, nil, err end
-    local head = res:byte()
-    -- Moved to _M:update
-    -- local flag_FIN = res:byte()>=0x80
-    -- local flag_MASK = res:byte(2)>=0x80
-    local byte = res:byte(2)
-    local length = band(byte, 0x7f)
-    if length==126 then
-        res = sock:receive(2)
-        local b1, b2 = res:byte(1, 2)
-        length = shl(b1, 8) + b2
-    elseif length==127 then
-        res = sock:receive(8)
-        local b5, b6, b7, b8 = res:byte(5, 8)
-        length = shl(b5, 24) + shl(b6, 16) + shl(b7, 8) + b8
-    end
-    if length==0 then return "", head, nil end
-    res, err, part = sock:receive(length)
-    if part then
-        -- incomplete frame
-        ws.head = head
-        ws._buffer, ws._remain = part, length-#part
-        return nil, nil, "pending"
+    if #self._buffer>=self._expect then
+        local ret, head = self._buffer:sub(3), self._buffer:byte(1)
+        self._buffer, self._expect = "", 0
+        return ret, head, nil
     else
-        -- complete frame
-        return res, head, err
+        return nil, nil, "buffer length less than "..self._expect
     end
 end
 
+---send a message
+---@param message string
 function _M:send(message)
     send(self.socket, OPCODE.TEXT, message)
 end
 
+---send a ping message
+---@param message string
 function _M:ping(message)
     send(self.socket, OPCODE.PING, message)
 end
 
+---send a pong message (no need)
+---@param message any
 function _M:pong(message)
     send(self.socket, OPCODE.PONG, message)
 end
 
-local seckey = "osT3F7mvlojIvf3/8uIsJQ=="
+---update client status
 function _M:update()
     local sock = self.socket
     if self.status==STATUS.TCPOPENING then
@@ -188,13 +203,12 @@ function _M:update()
         end
     elseif self.status==STATUS.OPEN or self.status==STATUS.CLOSING then
         while true do
-            local res, head, err = read(self)
-            if err=="timeout" then
-                return
-            elseif err=="pending" then
-                return
-            elseif err=="closed" then
+            local res, head, err = self:read()
+            if err=="closed" then
+                self:onclose(1005, "")
                 self.status = STATUS.CLOSED
+                return
+            elseif res==nil then
                 return
             end
             local opcode = band(head, 0x0f)
@@ -210,15 +224,18 @@ function _M:update()
                 self.status = STATUS.CLOSED
             elseif opcode==OPCODE.PING then self:pong(res)
             elseif opcode==OPCODE.CONTINUE then
-                self._frame = self._frame..res
-                if fin then self:onmessage(self._frame) end
+                self._continue = self._continue..res
+                if fin then self:onmessage(self._continue) end
             else
-                if fin then self:onmessage(res) else self._frame = res end
+                if fin then self:onmessage(res) else self._continue = res end
             end
         end
     end
 end
 
+---close websocket connection
+---@param code integer|nil
+---@param message string|nil
 function _M:close(code, message)
     if code and message then
         send(self.socket, OPCODE.CLOSE, string.char(shr(code, 8), band(code, 0xff))..message)
