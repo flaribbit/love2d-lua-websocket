@@ -149,7 +149,7 @@ function _M:read()
             self._length = length
         end
         self._head, self._buffer = self._buffer:byte(1), ""
-        goto RECIEVE
+        if length>0 then goto RECIEVE end
     end
     if #self._buffer>=self._length then
         local ret, head = self._buffer, self._head
