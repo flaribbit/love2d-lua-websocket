@@ -39,6 +39,7 @@ local STATUS = {
 ---@class wsclient
 ---@field socket table
 ---@field url table
+---@field _head integer|nil
 local _M = {
     OPCODE = OPCODE,
     STATUS = STATUS,
@@ -63,7 +64,8 @@ function _M.new(host, port, path)
         },
         _continue = "",
         _buffer = "",
-        _expect = 0,
+        _length = 2,
+        _head = nil,
         status = STATUS.TCPOPENING,
         socket = socket.tcp(),
     }
@@ -117,43 +119,45 @@ end
 function _M:read()
     local res, err, part
     ::RECIEVE::
-    res, err, part = self.socket:receive(self._expect>0 and self._expect-#self._buffer or 2)
+    res, err, part = self.socket:receive(self._length-#self._buffer)
     if err=="closed" then return nil, nil, err end
     if part or res then
         self._buffer = self._buffer..(part or res)
     else
         return nil, nil, nil
     end
-    if self._expect==0 then
+    if not self._head then
         if #self._buffer<2 then
             return nil, nil, "buffer length less than 2"
         end
         local length = band(self._buffer:byte(2), 0x7f)
         if length==126 then
+            if self._length==2 then self._length = 4 goto RECIEVE end
             if #self._buffer<4 then
                 return nil, nil, "buffer length less than 4"
             end
             local b1, b2 = self._buffer:byte(3, 4)
-            self._expect = 2 + shl(b1, 8) + b2
+            self._length, self._head, self._buffer = shl(b1, 8) + b2, self._buffer:byte(1), ""
             goto RECIEVE
         elseif length==127 then
+            if self._length==2 then self._length = 10 goto RECIEVE end
             if #self._buffer<10 then
                 return nil, nil, "buffer length less than 10"
             end
             local b5, b6, b7, b8 = self._buffer:byte(7, 10)
-            self._expect = 2 + shl(b5, 24) + shl(b6, 16) + shl(b7, 8) + b8
+            self._length, self._head, self._buffer = shl(b5, 24) + shl(b6, 16) + shl(b7, 8) + b8, self._buffer:byte(1), ""
             goto RECIEVE
         else
-            self._expect = 2 + length
+            self._length, self._head, self._buffer = length, self._buffer:byte(1), ""
             goto RECIEVE
         end
     end
-    if #self._buffer>=self._expect then
-        local ret, head = self._buffer:sub(3), self._buffer:byte(1)
-        self._buffer, self._expect = "", 0
+    if #self._buffer>=self._length then
+        local ret, head = self._buffer, self._head
+        self._length, self._buffer, self._head = 2, "", nil
         return ret, head, nil
     else
-        return nil, nil, "buffer length less than "..self._expect
+        return nil, nil, "buffer length less than "..self._length
     end
 end
 
