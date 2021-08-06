@@ -208,7 +208,6 @@ function _M:update()
         while true do
             local res, head, err = self:read()
             if err=="closed" then
-                self:onclose(1005, "")
                 self.status = STATUS.CLOSED
                 return
             elseif res==nil then
