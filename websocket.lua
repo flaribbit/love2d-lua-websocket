@@ -137,20 +137,19 @@ function _M:read()
                 return nil, nil, "buffer length less than 4"
             end
             local b1, b2 = self._buffer:byte(3, 4)
-            self._length, self._head, self._buffer = shl(b1, 8) + b2, self._buffer:byte(1), ""
-            goto RECIEVE
+            self._length = shl(b1, 8) + b2
         elseif length==127 then
             if self._length==2 then self._length = 10 goto RECIEVE end
             if #self._buffer<10 then
                 return nil, nil, "buffer length less than 10"
             end
             local b5, b6, b7, b8 = self._buffer:byte(7, 10)
-            self._length, self._head, self._buffer = shl(b5, 24) + shl(b6, 16) + shl(b7, 8) + b8, self._buffer:byte(1), ""
-            goto RECIEVE
+            self._length = shl(b5, 24) + shl(b6, 16) + shl(b7, 8) + b8
         else
-            self._length, self._head, self._buffer = length, self._buffer:byte(1), ""
-            goto RECIEVE
+            self._length = length
         end
+        self._head, self._buffer = self._buffer:byte(1), ""
+        goto RECIEVE
     end
     if #self._buffer>=self._length then
         local ret, head = self._buffer, self._head
