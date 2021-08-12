@@ -8,10 +8,14 @@ local client = {
 }
 local res, head, err
 local function receive(t)
-    return function()
+    return function(_, n)
         if #t>0 then
             local ret = t[1]
-            table.remove(t, 1)
+            if n<#ret then
+                ret, t[1] = ret:sub(1,n), ret:sub(n+1)
+            else
+                table.remove(t, 1)
+            end
             return ret, nil, nil
         else
             return nil, "timeout", nil
