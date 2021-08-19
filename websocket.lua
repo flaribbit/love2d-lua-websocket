@@ -182,10 +182,10 @@ end
 function _M:update()
     local sock = self.socket
     if self.status==STATUS.TCPOPENING then
-        local peer = sock:getpeername()
+        local url = self.url
+        local _, err = sock:connect(url.host, url.port)
         self._length = self._length+1
-        if peer then
-            local url = self.url
+        if err=="already connected" then
             sock:send(
 "GET "..url.path.." HTTP/1.1\r\n"..
 "Host: "..url.host..":"..url.port.."\r\n"..
