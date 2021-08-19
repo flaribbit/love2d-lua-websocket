@@ -64,7 +64,7 @@ function _M.new(host, port, path)
         },
         _continue = "",
         _buffer = "",
-        _length = 2,
+        _length = 0,
         _head = nil,
         status = STATUS.TCPOPENING,
         socket = socket.tcp(),
@@ -182,8 +182,9 @@ end
 function _M:update()
     local sock = self.socket
     if self.status==STATUS.TCPOPENING then
-        local _, err = sock:connect("", 0)
-        if err=="already connected" then
+        local peer = sock:getpeername()
+        self._length = self._length+1
+        if peer then
             local url = self.url
             sock:send(
 "GET "..url.path.." HTTP/1.1\r\n"..
@@ -193,8 +194,9 @@ function _M:update()
 "Sec-WebSocket-Version: 13\r\n"..
 "Sec-WebSocket-Key: "..seckey.."\r\n\r\n")
             self.status = STATUS.CONNECTING
-        elseif err=="Cannot assign requested address" then
-            self:onerror("TCP connection failed.")
+            self._length = 2
+        elseif self._length>600 then
+            self:onerror("connection failed")
             self.status = STATUS.CLOSED
         end
     elseif self.status==STATUS.CONNECTING then
