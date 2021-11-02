@@ -4,8 +4,6 @@ Event-driven websocket client for love2d in pure lua, which aims to be simple an
 
 Not all websocket features are implemented, but it works fine. Tested with aiohttp(python) and ws(nodejs) library.
 
-⚠️ `wss://` connection (websocket with TLS) is not supported. If you need that, you may try [löve-ws](https://github.com/holywyvern/love-ws).
-
 ## Quick start
 Just copy `websocket.lua` to your project directory, and write code as the following example.
 
@@ -26,6 +24,9 @@ function love.update()
     client:update()
 end
 ```
+
+## WSS connection
+If you need wss connection(websocket with TLS), you can use [LuaSec](https://github.com/brunoos/luasec) with this library, or just use [löve-ws](https://github.com/holywyvern/love-ws).
 
 ## API
 * `websocket.new(host: string, port: int, path?: string) -> client`
